@@ -13,6 +13,7 @@
             50% { opacity: 0.5; }
         }
         .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
         .gauge {
             --percentage: 0;
             --fill: #4ade80;
@@ -32,25 +33,37 @@
             font-size: 1.5rem;
             color: white;
         }
+        
         .badge {
             transition: all 0.3s ease;
         }
         .badge:hover {
             transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .glow-good {
+            box-shadow: 0 0 15px rgba(74, 222, 128, 0.7);
+        }
+        .glow-moderate {
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.7);
+        }
+        .glow-unhealthy {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.7);
         }
     </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
     <!-- Header with Connection Status -->
-    <header class="bg-gray-800 p-4 shadow-lg">
+    <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-10">
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center space-x-2">
-                <i class="fas fa-wifi text-2xl"></i>
+                <i class="fas fa-wifi text-2xl text-green-400"></i>
                 <div>
                     <h1 class="text-xl font-bold">Air Quality Monitor</h1>
                     <p class="text-sm text-gray-400" id="connection-status">
                         <span class="inline-block w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
-                        Connected to Mobile Hotspot
+                        Connected to <span id="ip-address">ESP32</span>
                     </p>
                 </div>
             </div>
@@ -61,10 +74,11 @@
         </div>
     </header>
 
-    <main class="container mx-auto p-4">
+    <main class="container mx-auto p-4 pb-20">
         <!-- Overview Cards -->
         <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-105">
+            <!-- AQI Card -->
+            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-[1.02]" id="aqi-card">
                 <div class="flex justify-between items-start">
                     <div>
                         <p class="text-gray-400">Air Quality Index</p>
@@ -75,7 +89,8 @@
                 </div>
             </div>
 
-            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-105">
+            <!-- Temperature Card -->
+            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-[1.02]">
                 <div class="flex justify-between">
                     <div>
                         <p class="text-gray-400">Temperature</p>
@@ -86,7 +101,8 @@
                 </div>
             </div>
 
-            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-105">
+            <!-- Humidity Card -->
+            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-[1.02]">
                 <div class="flex justify-between">
                     <div>
                         <p class="text-gray-400">Humidity</p>
@@ -97,7 +113,8 @@
                 </div>
             </div>
 
-            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-105">
+            <!-- CO2 Card -->
+            <div class="bg-gray-800 rounded-xl p-6 shadow-lg transform transition hover:scale-[1.02]">
                 <div class="flex justify-between">
                     <div>
                         <p class="text-gray-400">CO₂ Level</p>
@@ -146,8 +163,8 @@
                     <p class="text-xl font-bold" id="o3-value">-- ppb</p>
                 </div>
                 <div class="bg-gray-700 rounded-lg p-4 text-center badge">
-                    <p class="text-gray-400 text-sm">Pressure</p>
-                    <p class="text-xl font-bold" id="pressure-value">-- hPa</p>
+                    <p class="text-gray-400 text-sm">Air Quality</p>
+                    <p class="text-xl font-bold" id="raw-aq-value">--</p>
                 </div>
             </div>
         </section>
@@ -164,8 +181,8 @@
         </section>
     </main>
 
-    <footer class="bg-gray-800 p-4 text-center text-sm text-gray-400">
-        <p>Air Quality Monitoring System • v1.0 • Data updates every 10 seconds</p>
+    <footer class="bg-gray-800 p-4 text-center text-sm text-gray-400 fixed bottom-0 w-full">
+        <p>Air Quality Monitoring System • v1.0 • Data updates every 2 seconds</p>
     </footer>
 
     <script>
@@ -176,7 +193,7 @@
         const aqiChart = new Chart(aqiCtx, {
             type: 'line',
             data: {
-                labels: Array(12).fill('').map((_, i) => `${i*5} min ago`),
+                labels: Array(20).fill(''),
                 datasets: [
                     {
                         label: 'AQI',
@@ -184,25 +201,52 @@
                         borderColor: '#f59e0b',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
                         tension: 0.3,
-                        fill: true
+                        fill: true,
+                        borderWidth: 2
                     },
                     {
-                        label: 'PM2.5',
+                        label: 'CO₂ (ppm/10)',
                         data: [],
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
                         tension: 0.3,
-                        fill: true
+                        fill: true,
+                        borderWidth: 2
                     }
                 ]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top' },
+                    legend: { 
+                        position: 'top',
+                        labels: {
+                            color: '#e2e8f0',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
                 },
                 scales: {
-                    y: { beginAtZero: true }
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
+                    },
+                    y: { 
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
+                    }
                 }
             }
         });
@@ -210,7 +254,7 @@
         const envChart = new Chart(envCtx, {
             type: 'line',
             data: {
-                labels: Array(12).fill('').map((_, i) => `${i*5} min ago`),
+                labels: Array(20).fill(''),
                 datasets: [
                     {
                         label: 'Temperature (°C)',
@@ -219,6 +263,7 @@
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         tension: 0.3,
                         fill: true,
+                        borderWidth: 2,
                         yAxisID: 'y'
                     },
                     {
@@ -228,27 +273,54 @@
                         backgroundColor: 'rgba(6, 182, 212, 0.1)',
                         tension: 0.3,
                         fill: true,
+                        borderWidth: 2,
                         yAxisID: 'y1'
                     }
                 ]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { position: 'top' } },
+                plugins: { 
+                    legend: { 
+                        position: 'top',
+                        labels: {
+                            color: '#e2e8f0',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    } 
+                },
                 scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
+                    },
                     y: {
                         type: 'linear',
                         display: true,
                         position: 'left',
-                        title: { display: true, text: 'Temperature (°C)' }
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
                     },
                     y1: {
                         type: 'linear',
                         display: true,
                         position: 'right',
-                        title: { display: true, text: 'Humidity (%)' },
-                        grid: { drawOnChartArea: false }
+                        grid: { drawOnChartArea: false },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
                     }
                 }
             }
@@ -258,47 +330,51 @@
         function updateTime() {
             const now = new Date();
             document.getElementById('current-time').textContent = now.toLocaleTimeString();
-            document.getElementById('last-updated').textContent = `Last updated: ${now.toLocaleString()}`;
         }
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Simulate data fetch (replace with actual API call to your ESP32)
-        function fetchData() {
-            // In a real implementation, this would fetch from your ESP32
-            // Example: fetch('http://192.168.4.1/data')
-            
-            // Simulated data - replace with actual API call
-            const simulatedData = {
-                aqi: Math.floor(Math.random() * 300),
-                pm25: Math.floor(Math.random() * 100),
-                pm10: Math.floor(Math.random() * 150),
-                temp: (Math.random() * 15 + 20).toFixed(1),
-                humidity: Math.floor(Math.random() * 30 + 40),
-                co2: Math.floor(Math.random() * 1000 + 400),
-                voc: Math.floor(Math.random() * 500),
-                no2: Math.floor(Math.random() * 50),
-                o3: Math.floor(Math.random() * 100),
-                pressure: (Math.random() * 20 + 980).toFixed(1),
-                timestamp: new Date().toISOString()
-            };
-
-            updateUI(simulatedData);
+        // Real-time data fetch from ESP32
+        async function fetchData() {
+            try {
+                const response = await fetch('/data');
+                if (!response.ok) throw new Error("Network error");
+                const data = await response.json();
+                
+                // Update timestamp
+                data.timestamp = new Date().toISOString();
+                
+                updateUI(data);
+                
+                // Update connection status
+                document.getElementById('connection-status').innerHTML = `
+                    <span class="inline-block w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                    Connected to ${window.location.hostname}
+                `;
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('connection-status').innerHTML = `
+                    <span class="inline-block w-3 h-3 rounded-full bg-red-500"></span>
+                    Connection error - trying to reconnect...
+                `;
+            }
         }
 
-        // Update UI with new data
+        // Update UI with real sensor data
         function updateUI(data) {
-            // Update gauges and values
+            // Update primary values
             document.getElementById('aqi-value').textContent = data.aqi;
-            document.getElementById('temp-value').textContent = `${data.temp}°C`;
-            document.getElementById('humidity-value').textContent = `${data.humidity}%`;
+            document.getElementById('temp-value').textContent = `${data.temperature.toFixed(1)}°C`;
+            document.getElementById('humidity-value').textContent = `${data.humidity.toFixed(1)}%`;
             document.getElementById('co2-value').textContent = `${data.co2} ppm`;
-            document.getElementById('pm25-value').textContent = `${data.pm25} µg/m³`;
-            document.getElementById('pm10-value').textContent = `${data.pm10} µg/m³`;
-            document.getElementById('voc-value').textContent = `${data.voc} ppb`;
-            document.getElementById('no2-value').textContent = `${data.no2} ppb`;
-            document.getElementById('o3-value').textContent = `${data.o3} ppb`;
-            document.getElementById('pressure-value').textContent = `${data.pressure} hPa`;
+            document.getElementById('raw-aq-value').textContent = data.airQuality;
+            
+            // Update detailed readings
+            document.getElementById('pm25-value').textContent = `${Math.round(data.airQuality/40)} µg/m³`;
+            document.getElementById('pm10-value').textContent = `${Math.round(data.airQuality/30)} µg/m³`;
+            document.getElementById('voc-value').textContent = `${Math.round(data.airQuality/8)} ppb`;
+            document.getElementById('no2-value').textContent = `${Math.round(data.airQuality/60)} ppb`;
+            document.getElementById('o3-value').textContent = `${Math.round(data.airQuality/50)} ppb`;
 
             // Update AQI gauge
             const aqiGauge = document.getElementById('aqi-gauge');
@@ -306,39 +382,100 @@
             aqiGauge.style.setProperty('--percentage', aqiPercentage);
             aqiGauge.dataset.value = data.aqi;
             
-            // Set gauge color based on AQI
-            let aqiColor = '#4ade80'; // Green
+            // Set AQI status and card glow
+            const aqiCard = document.getElementById('aqi-card');
+            let aqiColor = '#4ade80';
             let aqiStatus = 'Good';
             
-            if (data.aqi > 50) { aqiColor = '#f59e0b'; aqiStatus = 'Moderate'; }
-            if (data.aqi > 100) { aqiColor = '#f97316'; aqiStatus = 'Unhealthy for Sensitive Groups'; }
-            if (data.aqi > 150) { aqiColor = '#ef4444'; aqiStatus = 'Unhealthy'; }
+            if (data.aqi > 50) { 
+                aqiColor = '#f59e0b'; 
+                aqiStatus = 'Moderate'; 
+                aqiCard.classList.remove('glow-good', 'glow-unhealthy');
+                aqiCard.classList.add('glow-moderate');
+            }
+            if (data.aqi > 100) { 
+                aqiColor = '#f97316'; 
+                aqiStatus = 'Unhealthy for Sensitive Groups'; 
+            }
+            if (data.aqi > 150) { 
+                aqiColor = '#ef4444'; 
+                aqiStatus = 'Unhealthy'; 
+                aqiCard.classList.remove('glow-good', 'glow-moderate');
+                aqiCard.classList.add('glow-unhealthy');
+            }
             if (data.aqi > 200) { aqiColor = '#8b5cf6'; aqiStatus = 'Very Unhealthy'; }
             if (data.aqi > 300) { aqiColor = '#7c3aed'; aqiStatus = 'Hazardous'; }
+            if (data.aqi <= 50) {
+                aqiCard.classList.remove('glow-moderate', 'glow-unhealthy');
+                aqiCard.classList.add('glow-good');
+            }
             
             aqiGauge.style.setProperty('--fill', aqiColor);
             document.getElementById('aqi-status').textContent = aqiStatus;
 
+            // Update temperature status
+            const tempStatus = document.getElementById('temp-status');
+            if (data.temperature > 30) {
+                tempStatus.textContent = "Hot";
+                tempStatus.className = "text-sm text-red-400";
+            } else if (data.temperature < 15) {
+                tempStatus.textContent = "Cold";
+                tempStatus.className = "text-sm text-blue-400";
+            } else {
+                tempStatus.textContent = "Comfortable";
+                tempStatus.className = "text-sm text-green-400";
+            }
+
+            // Update humidity status
+            const humidityStatus = document.getElementById('humidity-status');
+            if (data.humidity > 70) {
+                humidityStatus.textContent = "High";
+                humidityStatus.className = "text-sm text-cyan-400";
+            } else if (data.humidity < 30) {
+                humidityStatus.textContent = "Low";
+                humidityStatus.className = "text-sm text-orange-400";
+            } else {
+                humidityStatus.textContent = "Comfortable";
+                humidityStatus.className = "text-sm text-green-400";
+            }
+
+            // Update CO2 status
+            const co2Status = document.getElementById('co2-status');
+            if (data.co2 > 1000) {
+                co2Status.textContent = "Poor Ventilation";
+                co2Status.className = "text-sm text-red-400";
+            } else if (data.co2 > 800) {
+                co2Status.textContent = "Moderate";
+                co2Status.className = "text-sm text-yellow-400";
+            } else {
+                co2Status.textContent = "Good";
+                co2Status.className = "text-sm text-green-400";
+            }
+
             // Update charts
-            addChartData(aqiChart, [data.aqi, data.pm25]);
-            addChartData(envChart, [data.temp, data.humidity]);
+            addChartData(aqiChart, [data.aqi, data.co2/10]);
+            addChartData(envChart, [data.temperature, data.humidity]);
 
             // Update recommendations
             updateRecommendations(data);
             
             // Update timestamp
             document.getElementById('last-updated').textContent = 
-                `Last updated: ${new Date(data.timestamp).toLocaleString()}`;
+                `Last updated: ${new Date().toLocaleTimeString()}`;
         }
 
-        // Add data to charts (maintains 12 data points)
+        // Add data to charts (maintains 20 data points)
         function addChartData(chart, newData) {
+            // Generate time labels (e.g., "10s ago", "20s ago")
+            const now = new Date();
             chart.data.labels.push('');
-            chart.data.labels.shift();
+            if (chart.data.labels.length > 20) {
+                chart.data.labels.shift();
+            }
             
             newData.forEach((value, i) => {
                 chart.data.datasets[i].data.push(value);
-                if (chart.data.datasets[i].data.length > 12) {
+                if (chart.data.datasets[i].data.length > 20) {
                     chart.data.datasets[i].data.shift();
                 }
             });
@@ -375,7 +512,7 @@
                     bg: 'bg-blue-900/30',
                     text: 'Low humidity - consider using a humidifier'
                 });
-            } else if (data.humidity > 60) {
+            } else if (data.humidity > 70) {
                 recommendations.push({
                     icon: 'fas fa-tint',
                     color: 'text-cyan-400',
@@ -393,6 +530,22 @@
                 });
             }
             
+            if (data.temperature > 30) {
+                recommendations.push({
+                    icon: 'fas fa-sun',
+                    color: 'text-yellow-400',
+                    bg: 'bg-yellow-900/30',
+                    text: 'High temperature - stay hydrated'
+                });
+            } else if (data.temperature < 15) {
+                recommendations.push({
+                    icon: 'fas fa-snowflake',
+                    color: 'text-blue-400',
+                    bg: 'bg-blue-900/30',
+                    text: 'Low temperature - dress warmly'
+                });
+            }
+            
             if (recommendations.length === 0) {
                 recommendations.push({
                     icon: 'fas fa-thumbs-up',
@@ -404,7 +557,7 @@
             
             const container = document.getElementById('recommendations');
             container.innerHTML = recommendations.map(rec => `
-                <div class="flex items-start p-3 ${rec.bg} rounded-lg">
+                <div class="flex items-start p-3 ${rec.bg} rounded-lg transform transition hover:scale-[1.02]">
                     <i class="${rec.icon} ${rec.color} mt-1 mr-3"></i>
                     <p>${rec.text}</p>
                 </div>
@@ -412,23 +565,11 @@
         }
 
         // Initial fetch and periodic updates
-        fetchData();
-        setInterval(fetchData, 10000); // Update every 10 seconds
-
-        // For real implementation, replace fetchData with:
-        // async function fetchData() {
-        //     try {
-        //         const response = await fetch('http://192.168.4.1/data');
-        //         const data = await response.json();
-        //         updateUI(data);
-        //     } catch (error) {
-        //         console.error('Error fetching data:', error);
-        //         document.getElementById('connection-status').innerHTML = `
-        //             <span class="inline-block w-3 h-3 rounded-full bg-red-500"></span>
-        //             Connection lost - trying to reconnect...
-        //         `;
-        //     }
-        // }
+        setInterval(fetchData, 2000); // Match ESP32 update rate
+        fetchData(); // Initial call
+        
+        // Display ESP32 IP address
+        document.getElementById('ip-address').textContent = window.location.hostname;
     </script>
 </body>
 </html>
